@@ -5,7 +5,6 @@ from ray import tune
 import ray
 
 from AuGraph_env import AuGraphEnv
-from AuGraph_env_restore import AuGraphEnvRestore
 from AuGraph_model import AuGraphModel
 from ray.rllib.agents.ddpg import DDPGTrainer
 from ray.rllib.models.catalog import ModelCatalog
@@ -199,7 +198,7 @@ tunerun = tune.run(
     # 隔几个training_iteration存储一次
     # restore=path #载入检查点
     stop={
-        'training_iteration': 300  # 训练轮次
+        'training_iteration': 200  # 训练轮次
     }
 )
 

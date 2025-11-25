@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always">
+  <component name="PublishConfigData" autoUpload="Always" serverName="polimi">
     <serverData>
       <paths name="polimi">
         <serverdata>
           <mappings>
-            <mapping deploy="/minLP/2-ADMIRE" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/zheng/2-ADMIRE" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>

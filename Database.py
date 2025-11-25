@@ -37,12 +37,6 @@ data_path20 = 'traffic/traffic_2020-10-13.csv'
 data_path21 = 'traffic/Traffic0704.csv'   # 100个测试集
 
 
-# data_path = 'traffic/traffic_2020-10-14.csv'
-# data_path = 'traffic/Traffic0704_double.csv'
-# data_path = 'traffic/traffic_2020-09-14_double.csv'
-# data_path = 'traffic/traffic_2020-10-12_double.csv'
-# data_path = 'traffic/traffic_2020-10-13_double.csv'
-
 data_path_list = [data_path0,data_path1,data_path2,data_path3,data_path4,data_path5,data_path6,data_path7,
                   data_path8,data_path9,data_path10,data_path11,data_path12,data_path13, data_path14,
                   data_path15,data_path16,data_path17,data_path18,data_path19,data_path20,data_path21]
