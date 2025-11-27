@@ -1,20 +1,13 @@
 import numpy as np
 import random
 import torch
-from ray import tune
 import ray
-import os
 from ray.rllib.agents.ddpg import DDPGTrainer
 from AuGraph_env import AuGraphEnv
 from AuGraph_env_restore import AuGraphEnvRestore
 from ray.rllib.models.catalog import ModelCatalog
 from AuGraph_model import AuGraphModel
-import Compute
-import Database
-import AuOdlConvert
-import AuGraph
 import Restore_path
-import Service
 
 ## 设置随机种子
 seed_num = 0
@@ -32,11 +25,38 @@ ModelCatalog.register_custom_model('augraph_model', AuGraphModel)  # 使用自�
 # 参数配置，把ddpg文件的粘过来就可以
 config_re = {
     # 其他
-    'env': AuGraphEnv,
+    'env': AuGraphEnvRestore,
     'framework': 'torch',
     'seed': seed_num,
     # 'num_gpus': int(os.environ.get("RLLIB_NUM_GPUS", "0")),  # GPU
     'num_gpus': 0,  # GPU，需要<1
+
+    # === Twin Delayed DDPG (TD3) and Soft Actor-Critic (SAC) tricks ===
+    # TD3: https://spinningup.openai.com/en/latest/algorithms/td3.html
+    # In addition to settings below, you can use "exploration_noise_type" and
+    # "exploration_gauss_act_noise" to get IID Gaussian exploration noise
+    # instead of OU exploration noise.
+    # twin Q-net
+    "twin_q": True,
+    # delayed policy update
+    "policy_delay": 1,
+    # target policy smoothing
+    # (this also replaces OU exploration noise with IID Gaussian exploration
+    # noise, for now)
+    "smooth_target_policy": True,
+    # gaussian stddev of target action noise for smoothing
+    "target_noise": 0.2,
+    # target noise limit (bound)
+    "target_noise_clip": 0.5,
+
+    # === Evaluation ===
+    # Evaluate with epsilon=0 every `evaluation_interval` training iterations.
+    # The evaluation stats will be reported under the "evaluation" metric key.
+    # Note that evaluation is currently not parallelized, and that for Ape-X
+    # metrics are already only reported for the lowest epsilon workers.
+    "evaluation_interval": None,
+    # Number of episodes to run per evaluation period.
+    "evaluation_duration": 10,
 
     # ========= Model ============
     # 在进入actor和critic的隐藏层之前，会先运行'model'里的参数
@@ -58,17 +78,6 @@ config_re = {
         "post_fcnet_activation": 'relu',  # tune.grid_search(['relu','tanh'])
     },
 
-    # === Twin Delayed DDPG (TD3) and Soft Actor-Critic (SAC) tricks ===
-    "twin_q": True,  # twin Q-net
-    "policy_delay": 1,  # delayed policy update，1-4都可以
-    "smooth_target_policy": True,  # target policy smoothing
-    'target_noise': 0.1,  # gaussian stddev of target action noise for smoothing
-    "target_noise_clip": 0.3,  # target noise limit (bound),不超过0.5
-
-    # === Evaluation ===
-    "evaluation_interval": None,
-    "evaluation_num_episodes": 10,  # Number of episodes to run per evaluation period.
-
     # === Exploration ===
     "explore": True,
     "exploration_config": {
@@ -77,9 +86,9 @@ config_re = {
         "type": "GaussianNoise",
         # For how many timesteps should we return completely random actions,
         # before we start adding (scaled) noise?
-        "random_timesteps": 0,
+        "random_timesteps": 5000,
         # Gaussian stddev of action noise for exploration.
-        "stddev": 0.05,  # tune.grid_search([0.02,0.03,0.04,0.05]), #0.15,0.2不太好
+        "stddev": 0.1,  # tune.grid_search([0.1, 0.15]),
         # Scaling settings by which the Gaussian noise is scaled before
         # being added to the actions. NOTE: The scale timesteps start only
         # after(!) any random steps have been finished.
@@ -96,56 +105,76 @@ config_re = {
     },
 
     # === Replay buffer ===
-    'buffer_size': 50000,
-    # If True prioitized replay buffer will be used.
+    # Size of the replay buffer. Note that if async_updates is set, then
+    # each worker will have a replay buffer of this size.
+    "buffer_size": 20000,
+    "replay_buffer_config": {
+        "type": "MultiAgentReplayBuffer",
+        "capacity": 50000,
+    },
+    # Set this to True, if you want the contents of your buffer(s) to be
+    # stored in any saved checkpoints as well.
+    # Warnings will be created if:
+    # - This is True AND restoring from a checkpoint that contains no buffer
+    #   data.
+    # - This is False AND restoring from a checkpoint that does contain
+    #   buffer data.
+    "store_buffer_in_checkpoints": False,
+    # If True prioritized replay buffer will be used.
     "prioritized_replay": True,
     # Alpha parameter for prioritized replay buffer.
-    "prioritized_replay_alpha": 0.6,
+    "prioritized_replay_alpha": 0.7,
     # Beta parameter for sampling from prioritized replay buffer.
-    "prioritized_replay_beta": 0.4,
-    # Time steps over which the beta parameter is annealed.
-    'prioritized_replay_beta_annealing_timesteps': 20000,
-    # Final value of beta
-    "final_prioritized_replay_beta": 0.3,
+    "prioritized_replay_beta": 0.3,
     # Epsilon to add to the TD errors when updating priorities.
-    'prioritized_replay_eps': 1e-4,
+    "prioritized_replay_eps": 1e-4,
     # Whether to LZ4 compress observations
     "compress_observations": False,
-    # If set, this will fix the ratio of replayed from a buffer and learned on
-    # timesteps to sampled from an environment and stored in the replay buffe4
-    # timesteps. Otherwise, the replay will proceed at the native ratio
-    # determined by (train_batch_size / rollout_fragment_length).
+
+    # The intensity with which to update the model (vs collecting samples from
+    # the env). If None, uses the "natural" value of:
+    # `train_batch_size` / (`rollout_fragment_length` x `num_workers` x
+    # `num_envs_per_worker`).
+    # If provided, will make sure that the ratio between ts inserted into and
+    # sampled from the buffer matches the given value.
+    # Example:
+    #   training_intensity=1000.0
+    #   train_batch_size=250 rollout_fragment_length=1
+    #   num_workers=1 (or 0) num_envs_per_worker=1
+    #   -> natural value = 250 / 1 = 250.0
+    #   -> will make sure that replay+train op will be executed 4x as
+    #      often as rollout+insert op (4 * 250 = 1000).
+    # See: rllib/agents/dqn/dqn.py::calculate_rr_weights for further details.
     "training_intensity": None,
 
-    # ========= Optimization ==============
-    # cl是al的0.1-1倍
+    # === Optimization ===
     # Learning rate for the critic (Q-function) optimizer.
-    'critic_lr': 1e-4,  # tune.grid_search([1e-4, 6e-5]), #1e-4,cl变成1e-5之后不收敛
+    "critic_lr": 1e-4,
     # Learning rate for the actor (policy) optimizer.
-    'actor_lr': 1e-5,  # tune.grid_search([1e-5,2e-5]),
+    "actor_lr": 1e-4,
     # Update the target network every `target_network_update_freq` steps.
-    'target_network_update_freq': 0,  # 2000
+    "target_network_update_freq": 2000,
     # Update the target by \tau * policy + (1-\tau) * target_policy
-    'tau': 0.001,  # 软更新系数略小于1,和知乎里面刚好的相反的
+    "tau": 0.001,
     # If True, use huber loss instead of squared loss for critic network
     # Conventionally, no need to clip gradients if using a huber loss
-    "use_huber": False,  # no Huber loss
+    "use_huber": False,
     # Threshold of a huber loss
     "huber_threshold": 1.0,
-    # Weights for L2 regularization,TD3 no l2 regularisation
-    "l2_reg": 1e-6,  # 1e-6,
+    # Weights for L2 regularization
+    "l2_reg": 1e-6,
     # If not None, clip gradients during optimization at this value
     "grad_clip": None,
-    "clip_rewards": False,
     # How many steps of the model to sample before learning starts.
-    'learning_starts': 20000,  # tune.grid_search([10000,5000]), # tune.choice([1500,2000,2500]),
-    # Update the replay buffer with this many samples at once.
-    "rollout_fragment_length": 1,
+    "learning_starts": 1500,
+    # Update the replay buffer with this many samples at once. Note that this
+    # setting applies per-worker if num_workers > 1.
+    "rollout_fragment_length": 10,
     # Size of a batched sampled from replay buffer for training. Note that
     # if async_updates is set, then each worker returns gradients for a
     # batch of this size.
-    'train_batch_size': 128,
-    'gamma': 0.98,  # tune.grid_search([0.98, 0.99]),      # 奖励衰减
+    "train_batch_size": 256,
+    'gamma': 0.98,  # 奖励衰减
 
     # === Parallelism ===
     # Number of workers for collecting samples with. This only makes sense
@@ -154,9 +183,13 @@ config_re = {
     "num_workers": 0,
     # Whether to compute priorities on workers.
     "worker_side_prioritization": False,
-    # Prevent iterations from going lower than this time span
-    "min_iter_time_s": 1,
-    # "num_gpus_per_worker": 0,
+    # Prevent reporting frequency from going lower than this time span.
+    "min_time_s_per_reporting": 1,
+    # Experimental flag.
+    # If True, the execution plan API will not be used. Instead,
+    # a Trainer's `training_iteration` method will be called as-is each
+    # training iteration.
+    "_disable_execution_plan_api": False,
 
 }
 
@@ -171,7 +204,7 @@ done = False
 obs = env.reset()
 
 count = 0  # 可以在测试的时候也多跑几次，取一个最好的，把explore开启之后是能选到训练时最好的路径
-reward_max = -10000
+reward_max = -1000
 reward_list = []    # 奖励集合
 while count < 20:
     virtual_hop_cumulate = 0  # 累计虚拟拓扑跳数
@@ -253,7 +286,7 @@ while count < 20:
         #         file.write('\n')
         #     file.close()
 
-    reward_list.append(episode_reward/50)
+    reward_list.append(episode_reward)
     count += 1
     episode_reward = 0
     obs = env.reset()

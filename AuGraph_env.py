@@ -6,7 +6,6 @@ import Database
 import RWA
 import Service
 import AuGraph
-import Compute
 
 
 class AuGraphEnv(gym.Env):
@@ -19,7 +18,6 @@ class AuGraphEnv(gym.Env):
 
     # 初始化
     def __init__(self, env_config):
-        # gym.spaces.Box是连续取值
         self.action_space = Box(low=np.zeros(5), high=Database.weight_max * np.ones(5), dtype=np.int32)  # 5个连续动作空间，0-255，以5增长
         self.observation_space = Dict({
             'phylink': Box(low=-1*np.ones([Database.wavelength_number * Database.time, Database.node_number, Database.node_number]),
@@ -31,7 +29,6 @@ class AuGraphEnv(gym.Env):
             'request_src': Box(low=np.array([0]), high=np.array([Database.node_number-1]), shape=(1,), dtype=np.int32),
             'request_dest': Box(low=np.array([0]), high=np.array([Database.node_number-1]), shape=(1,), dtype=np.int32),
             # 业务流量
-
             'request_traffic': Box(low=np.zeros(Database.time), high=Database.wavelength_capacity * np.ones(Database.time), dtype=np.float32)
         })
         # self.init()
@@ -44,17 +41,17 @@ class AuGraphEnv(gym.Env):
         :return: 返回环境初始化状态
         """
         print("reset")
-        Service.generate_service(0,Database.time)  # 产生业务
+        Service.generate_service(0, Database.time)  # 产生业务
         links = Database.clear(Database.links_physical)  # 清空物理链路
         AuGraph.links_virtual_list.clear()      # 清空虚拟链路
         index = 0
         src, dest, traffic = self.find_req_info(index)
         self.observation = {
-            'phylink': links,
-            'request_index': [index],
-            'request_src': [src],
-            'request_dest': [dest],
-            'request_traffic': traffic
+            'phylink': np.array(links, dtype=np.float32),
+            'request_index': np.array([index], dtype=np.int32),
+            'request_src': np.array([src], dtype=np.int32),
+            'request_dest': np.array([dest], dtype=np.int32),
+            'request_traffic': np.array(traffic, dtype=np.float32)
         }
         self.done = False
         self.step_num = 0
@@ -93,11 +90,11 @@ class AuGraphEnv(gym.Env):
 
             request_src, request_dest, request_traffic = self.find_req_info(request_index)
             self.observation = {
-                'phylink': Database.links_physical,
-                'request_index': [request_index],
-                'request_src': [request_src],
-                'request_dest': [request_dest],
-                'request_traffic': request_traffic
+                'phylink': np.array(Database.links_physical, dtype=np.float32),
+                'request_index': np.array([request_index], dtype=np.int32),
+                'request_src': np.array([request_src], dtype=np.int32),
+                'request_dest': np.array([request_dest], dtype=np.int32),
+                'request_traffic': np.array(request_traffic, dtype=np.float32)
             }
             reward = lightpath_num * (-1)
             AuGraphEnv.lightpath_cumulate += lightpath_num
@@ -111,18 +108,17 @@ class AuGraphEnv(gym.Env):
 
             request_src, request_dest, request_traffic = self.find_req_info(request_index)
             self.observation = {
-                'phylink': Database.links_physical,
-                'request_index': [request_index],
-                'request_src': [request_src],
-                'request_dest': [request_dest],
-                'request_traffic': request_traffic
+                'phylink': np.array(Database.links_physical, dtype=np.float32),
+                'request_index': np.array([request_index], dtype=np.int32),
+                'request_src': np.array([request_src], dtype=np.int32),
+                'request_dest': np.array([request_dest], dtype=np.int32),
+                'request_traffic': np.array(request_traffic, dtype=np.float32)
             }
             reward = -10
             print('id', request_index_current, 'weight', action_t, "lightpath_cum", AuGraphEnv.lightpath_cumulate, "lightpath_cur", lightpath_num, "reward", reward)
 
         AuGraphEnv.au_edge_list = au_edge_collection
         return self.observation, reward, self.done, {}  # 最后的return全返回了，如果没到最左边或者最右边，self.done=False
-
 
     def render(self, mode='human'):
         pass

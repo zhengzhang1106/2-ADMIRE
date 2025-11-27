@@ -20,7 +20,6 @@ class AuGraphModel(TorchModelV2, nn.Module):
 
     （二）
     将上述两个输入拼接，传入actor和critic网络的隐藏层fc
-
     需要把输出变为一维的，作为actor和critic网络的输入
     """
 
@@ -164,18 +163,13 @@ class AuGraphModel(TorchModelV2, nn.Module):
         # outs.append(request_index)
 
         # 源目的节点one-hot编码
-        out_onehot_src = nn.functional.one_hot(request_src.long(),
-                                           (self.original_space['request_src'].high - self.original_space['request_src'].low)[
-                                               0] + 1)
+        out_onehot_src = nn.functional.one_hot(request_src.long(), (self.original_space['request_src'].high - self.original_space['request_src'].low)[0] + 1)
         out_onehot_src = out_onehot_src.squeeze(dim=1).float()  # 去除空维度
         # print('现在输出onehot输出尺寸')  #) torch.Size([32, 9])
         # print(out_onehot_src.shape)
         outs.append(out_onehot_src)
 
-        out_onehot_dest = nn.functional.one_hot(request_dest.long(),
-                                               (self.original_space['request_dest'].high - self.original_space[
-                                                   'request_dest'].low)[
-                                                   0] + 1)
+        out_onehot_dest = nn.functional.one_hot(request_dest.long(), (self.original_space['request_dest'].high - self.original_space['request_dest'].low)[0] + 1)
         out_onehot_dest = out_onehot_dest.squeeze(dim=1).float()  # 去除空维度
         # print('现在输出onehot输出尺寸')
         # print('out_onehot_dest',out_onehot_dest)

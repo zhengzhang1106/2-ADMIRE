@@ -6,7 +6,6 @@ import Database
 import RWA
 import Service
 import AuGraph
-import Compute
 
 
 # 解决路由失败的问题所写的新环境
@@ -26,7 +25,6 @@ class AuGraphEnvRestore(gym.Env):
         self.observation_space = Dict({
             'phylink': Box(low=-1*np.ones([Database.wavelength_number * Database.time, Database.node_number, Database.node_number]),
                            high=np.array(Database.clear(Database.links_physical)), dtype=np.float32),  # 物理链路9*9矩阵
-
             # 业务id,[0]
             'request_index': Box(low=np.array([0]), high=np.array([Database.job_number-1]), shape=(1,), dtype=np.int32),
             # 业务源、目的节点
@@ -53,11 +51,11 @@ class AuGraphEnvRestore(gym.Env):
         index = 0
         src, dest, traffic = self.find_req_info(index)
         self.observation = {
-            'phylink': links,
-            'request_index': [index],
-            'request_src': [src],
-            'request_dest': [dest],
-            'request_traffic': traffic
+            'phylink': np.array(links, dtype=np.float32),
+            'request_index': np.array([index], dtype=np.int32),
+            'request_src': np.array([src], dtype=np.int32),
+            'request_dest': np.array([dest], dtype=np.int32),
+            'request_traffic': np.array(traffic, dtype=np.float32)
         }
         self.done = False
         self.step_num = 0
@@ -65,7 +63,6 @@ class AuGraphEnvRestore(gym.Env):
         AuGraphEnvRestore.job_success = 0
         AuGraphEnvRestore.au_edge_list.clear()
         return self.observation
-
 
     # 步骤，更新环境，设置奖励
     # 所选动作作用于环境后环境返回的奖励和下一步状态，并判断是否达到终止状态
@@ -96,13 +93,13 @@ class AuGraphEnvRestore(gym.Env):
 
             request_src, request_dest, request_traffic = self.find_req_info(request_index)
             self.observation = {
-                'phylink': Database.links_physical,
-                'request_index': [request_index],
-                'request_src': [request_src],
-                'request_dest': [request_dest],
-                'request_traffic': request_traffic
+                'phylink': np.array(Database.links_physical, dtype=np.float32),
+                'request_index': np.array([request_index], dtype=np.int32),
+                'request_src': np.array([request_src], dtype=np.int32),
+                'request_dest': np.array([request_dest], dtype=np.int32),
+                'request_traffic': np.array(request_traffic, dtype=np.float32)
             }
-            reward = lightpath_num * 50 * (-1)   # 新增加波长的负值，有博客说reward在0-1之间比较好，
+            reward = lightpath_num * (-1)   # 新增加波长的负值，有博客说reward在0-1之间比较好，
             AuGraphEnvRestore.lightpath_cumulate += lightpath_num
             print('id', request_index_current,'weight', action_t, "lightpath_cum", AuGraphEnvRestore.lightpath_cumulate, "lightpath_cur", lightpath_num, "reward", reward)
         else:  # 选路失败不更新物理网络状态，也不重复部署当前业务，直接进入到下一个业务。因为是D式算法，所以大概率会选到同样的路
@@ -114,13 +111,13 @@ class AuGraphEnvRestore(gym.Env):
 
             request_src, request_dest, request_traffic = self.find_req_info(request_index)
             self.observation = {
-                'phylink': Database.links_physical,
-                'request_index': [request_index],
-                'request_src': [request_src],
-                'request_dest': [request_dest],
-                'request_traffic': request_traffic
+                'phylink': np.array(Database.links_physical, dtype=np.float32),
+                'request_index': np.array([request_index], dtype=np.int32),
+                'request_src': np.array([request_src], dtype=np.int32),
+                'request_dest': np.array([request_dest], dtype=np.int32),
+                'request_traffic': np.array(request_traffic, dtype=np.float32)
             }
-            reward = -500
+            reward = -10
             print('id', request_index_current, 'weight', action_t, "lightpath_cum", AuGraphEnvRestore.lightpath_cumulate, "lightpath_cur", lightpath_num, "reward", reward, )
 
         AuGraphEnvRestore.au_edge_list = au_edge_collection

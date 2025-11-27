@@ -22,14 +22,12 @@ ray.init()
 ModelCatalog.register_custom_model('augraph_model', AuGraphModel)  # 使用自定义模型
 tunerun = tune.run(
     DDPGTrainer,
-    # 填写ddpg的相关参数，可以搜索某些参数，比如学习率，奖励gamma等
     config={
         # 其他
         'env': AuGraphEnv,
         'framework': 'torch',
         'seed': seed_num,
-        # 'num_gpus': int(os.environ.get("RLLIB_NUM_GPUS", "0")),  # GPU
-        'num_gpus': 0,  # GPU，需要<1
+        'num_gpus': 0,
 
         # === Twin Delayed DDPG (TD3) and Soft Actor-Critic (SAC) tricks ===
         # TD3: https://spinningup.openai.com/en/latest/algorithms/td3.html
@@ -48,7 +46,6 @@ tunerun = tune.run(
         "target_noise": 0.2,
         # target noise limit (bound)
         "target_noise_clip": 0.5,
-
 
         # === Evaluation ===
         # Evaluate with epsilon=0 every `evaluation_interval` training iterations.
@@ -109,7 +106,7 @@ tunerun = tune.run(
         # === Replay buffer ===
         # Size of the replay buffer. Note that if async_updates is set, then
         # each worker will have a replay buffer of this size.
-        "buffer_size": 20000,
+        "buffer_size": 50000,
         "replay_buffer_config": {
             "type": "MultiAgentReplayBuffer",
             "capacity": 50000,
@@ -125,9 +122,9 @@ tunerun = tune.run(
         # If True prioritized replay buffer will be used.
         "prioritized_replay": True,
         # Alpha parameter for prioritized replay buffer.
-        "prioritized_replay_alpha": 0.7,
+        "prioritized_replay_alpha": 0.6,
         # Beta parameter for sampling from prioritized replay buffer.
-        "prioritized_replay_beta": 0.3,
+        "prioritized_replay_beta": 0.4,
         # Epsilon to add to the TD errors when updating priorities.
         "prioritized_replay_eps": 1e-4,
         # Whether to LZ4 compress observations
@@ -153,7 +150,7 @@ tunerun = tune.run(
         # Learning rate for the critic (Q-function) optimizer.
         "critic_lr": 1e-4,
         # Learning rate for the actor (policy) optimizer.
-        "actor_lr": 1e-4,
+        "actor_lr": 1e-5,
         # Update the target network every `target_network_update_freq` steps.
         "target_network_update_freq": 2000,
         # Update the target by \tau * policy + (1-\tau) * target_policy
@@ -168,7 +165,7 @@ tunerun = tune.run(
         # If not None, clip gradients during optimization at this value
         "grad_clip": None,
         # How many steps of the model to sample before learning starts.
-        "learning_starts": 1500,
+        "learning_starts": 5000,
         # Update the replay buffer with this many samples at once. Note that this
         # setting applies per-worker if num_workers > 1.
         "rollout_fragment_length": 10,
@@ -198,7 +195,7 @@ tunerun = tune.run(
     # 隔几个training_iteration存储一次
     # restore=path #载入检查点
     stop={
-        'training_iteration': 200  # 训练轮次
+        'training_iteration': 150  # 训练轮次
     }
 )
 
