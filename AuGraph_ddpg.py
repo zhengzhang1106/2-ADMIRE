@@ -85,7 +85,6 @@ tunerun = tune.run(
             # For how many timesteps should we return completely random actions,
             # before we start adding (scaled) noise?
             "random_timesteps": 5000,
-            # "random_timesteps": 10000,
             # Gaussian stddev of action noise for exploration.
             "stddev": 0.1,  # tune.grid_search([0.1, 0.15]),
             # Scaling settings by which the Gaussian noise is scaled before
